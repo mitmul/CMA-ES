@@ -1,16 +1,32 @@
 #include "cmaes.h"
 
-CmaEs::CmaEs(const int _dimension)
+CmaEs::CmaEs(const int _dimension, const vector<double> _scaling)
   : dimension(_dimension),
+    scaling(_scaling),
     gen(static_cast<unsigned long>(time(0))),
     nd(0.0, 1.0),
-    mt(gen, nd)
+    ud(-1.0, 1.0),
+    randn(gen, nd),
+    randu(gen, ud)
+{
+  if(_scaling.empty())
+  {
+    scaling.clear();
+    for(int i = 0; i < dimension; ++i)
+    {
+      scaling.push_back(1.0);
+    }
+  }
+  initialize();
+}
+
+void CmaEs::initialize()
 {
   // 初期平均ベクトル
   xmean.resize(dimension);
   for(int i = 0; i < dimension; ++i)
   {
-    xmean[i] = mt();//(double)rand() / RAND_MAX * 2.0 - 1.0;
+    xmean[i] = randu();//(double)rand() / RAND_MAX * 2.0 - 1.0;
   }
 
   // 初期分散
@@ -21,7 +37,7 @@ CmaEs::CmaEs(const int _dimension)
   stopeval = 1E3 * pow(dimension, 2.0);
 
   // 選択パラメータ
-  lambda = 4 + (300 * log(dimension)); // 子孫の数
+  lambda = 4 + (1000 * log(dimension)); // 子孫の数
   mu = lambda / 2;
 
   // 重みベクトル
@@ -94,13 +110,9 @@ CmaEs::CmaEs(const int _dimension)
   arindex.resize(lambda);
 }
 
-CmaEs::~CmaEs()
-{
-}
-
 double CmaEs::cost(const VectorXd &input_x)
 {
-#define ROSENBROCK
+#define GRIEWANK
 
 #ifdef RASTRIGIN
   int n = input_x.rows();
@@ -126,6 +138,22 @@ double CmaEs::cost(const VectorXd &input_x)
 
   return sum;
 #endif
+
+#ifdef GRIEWANK
+  double sum = 0.0;
+  int n = input_x.rows();
+  for(int i = 0; i < n; ++i)
+  {
+    sum += pow(input_x[i], 2.0) / 4000.0;
+  }
+  double prod = 1.0;
+  for(int i = 0; i < n; ++i)
+  {
+    prod *= cos(input_x[i] / sqrt(i + 1));
+  }
+
+  return 1.0 + sum - prod;
+#endif
 }
 
 void CmaEs::generateOffspring()
@@ -137,11 +165,17 @@ void CmaEs::generateOffspring()
     VectorXd D_rand = D;
     for(int j = 0; j < dimension; ++j)
     {
-      D_rand[j] *= mt();
+      D_rand[j] *= randn();
     }
     arx.col(i) = xmean + sigma * B * D_rand;
 
-    arfitness[i] = cost(arx.col(i));
+    // 目的変数ベクトルをスケーリング
+    VectorXd scaled(dimension);
+    for(int j = 0; j < dimension; ++j)
+      scaled[j] = scaling[j] * arx(j, i);
+
+    // 目的関数の評価
+    arfitness[i] = cost(scaled);
     ++counteval;
   }
 

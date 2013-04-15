@@ -5,7 +5,13 @@ using namespace std;
 
 int main()
 {
-  CmaEs *cma_es = new CmaEs(10);
+  int dimension = 20;
+  vector<double> scale;
+  for(int i = 0; i < dimension; ++i)
+  {
+    scale.push_back(512);
+  }
+  CmaEs *cma_es = new CmaEs(dimension, scale);
   cma_es->generationLoop();
 
   cout << "Hello World!" << endl;
